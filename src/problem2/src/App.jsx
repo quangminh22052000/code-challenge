@@ -44,6 +44,33 @@ const fetchPrices = async () => {
   return priceMap
 }
 
+// Success Toast Component
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="success-toast">
+      <div className="toast-content">
+        <div className="toast-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22,4 12,14.01 9,11.01"></polyline>
+          </svg>
+        </div>
+        <div className="toast-message">
+          <h4>Swap Successful! 🎉</h4>
+          <p>{message}</p>
+        </div>
+        <button className="toast-close" onClick={onClose}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div className="toast-progress"></div>
+    </div>
+  )
+}
+
 function App() {
   return (
     <div className="App">
@@ -58,6 +85,8 @@ function CryptoExchange() {
   const [selectedFromToken, setSelectedFromToken] = useState(TOKENS[0])
   const [selectedToToken, setSelectedToToken] = useState(TOKENS[1])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSuccessToast, setShowSuccessToast] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
   // Use useQuery to fetch prices
   const { 
@@ -96,8 +125,15 @@ function CryptoExchange() {
     // Simulate API call with loading
     await new Promise(resolve => setTimeout(resolve, 2000))
     
-    // Show success message
-    alert(`Successfully swapped ${values.fromAmount} ${selectedFromToken.symbol} for ${values.toAmount} ${selectedToToken.symbol}`)
+    // Show success toast
+    const message = `${values.fromAmount} ${selectedFromToken.symbol} → ${values.toAmount} ${selectedToToken.symbol}`
+    setSuccessMessage(message)
+    setShowSuccessToast(true)
+    
+    // Auto hide toast after 5 seconds
+    setTimeout(() => {
+      setShowSuccessToast(false)
+    }, 5000)
     
     setIsSubmitting(false)
     setSubmitting(false)
@@ -134,133 +170,143 @@ function CryptoExchange() {
   }
 
   return (
-    <div className="crypto-exchange">
-      <h1>💱 Currency Swap</h1>
-      
-      <Formik
-        initialValues={{
-          fromAmount: '',
-          toAmount: ''
-        }}
-        validationSchema={SwapSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ values, setFieldValue, isValid }) => {
-          const exchangeRate = getExchangeRate()
-          
-          // Auto-calculate to amount when from amount changes
-          const handleFromAmountChange = (e) => {
-            const value = e.target.value
-            setFieldValue('fromAmount', value)
-            if (value && exchangeRate > 0) {
-              setFieldValue('toAmount', (parseFloat(value) * exchangeRate).toFixed(6))
+    <>
+      <div className="crypto-exchange">
+        <h1>💱 Currency Swap</h1>
+        
+        <Formik
+          initialValues={{
+            fromAmount: '',
+            toAmount: ''
+          }}
+          validationSchema={SwapSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ values, setFieldValue, isValid }) => {
+            const exchangeRate = getExchangeRate()
+            
+            // Auto-calculate to amount when from amount changes
+            const handleFromAmountChange = (e) => {
+              const value = e.target.value
+              setFieldValue('fromAmount', value)
+              if (value && exchangeRate > 0) {
+                setFieldValue('toAmount', (parseFloat(value) * exchangeRate).toFixed(6))
+              }
             }
-          }
 
-          return (
-            <Form className="exchange-form">
-              {/* From Token */}
-              <div className="input-section">
-                <label>You Pay</label>
-                <div className="currency-input">
-                  <Field
-                    name="fromAmount"
-                    type="number"
-                    placeholder="0.00"
-                    onChange={handleFromAmountChange}
-                  />
-                  <TokenSelector
-                    token={selectedFromToken}
-                    onClick={() => setShowFromModal(true)}
-                  />
+            return (
+              <Form className="exchange-form">
+                {/* From Token */}
+                <div className="input-section">
+                  <label>You Pay</label>
+                  <div className="currency-input">
+                    <Field
+                      name="fromAmount"
+                      type="number"
+                      placeholder="0.00"
+                      onChange={handleFromAmountChange}
+                    />
+                    <TokenSelector
+                      token={selectedFromToken}
+                      onClick={() => setShowFromModal(true)}
+                    />
+                  </div>
+                  {values.fromAmount && (
+                    <div className="fiat-value">
+                      ≈ ${getUSDValue(values.fromAmount, selectedFromToken.symbol)} USD
+                    </div>
+                  )}
+                  <ErrorMessage name="fromAmount" component="div" className="error-message" />
                 </div>
-                {values.fromAmount && (
-                  <div className="fiat-value">
-                    ≈ ${getUSDValue(values.fromAmount, selectedFromToken.symbol)} USD
+
+                {/* Swap Button */}
+                <div className="swap-container">
+                  <button
+                    type="button"
+                    className="swap-btn"
+                    onClick={swapTokens}
+                  >
+                    <i>⇅</i>
+                  </button>
+                </div>
+
+                {/* To Token */}
+                <div className="input-section">
+                  <label>You Receive</label>
+                  <div className="currency-input">
+                    <Field
+                      name="toAmount"
+                      type="number"
+                      placeholder="0.00"
+                      readOnly
+                    />
+                    <TokenSelector
+                      token={selectedToToken}
+                      onClick={() => setShowToModal(true)}
+                    />
+                  </div>
+                  {values.toAmount && (
+                    <div className="fiat-value">
+                      ≈ ${getUSDValue(values.toAmount, selectedToToken.symbol)} USD
+                    </div>
+                  )}
+                  <ErrorMessage name="toAmount" component="div" className="error-message" />
+                </div>
+
+                {/* Exchange Rate */}
+                {exchangeRate > 0 && (
+                  <div className="exchange-rate">
+                    <span>1 {selectedFromToken.symbol} = {exchangeRate.toFixed(6)} {selectedToToken.symbol}</span>
                   </div>
                 )}
-                <ErrorMessage name="fromAmount" component="div" className="error-message" />
-              </div>
 
-              {/* Swap Button */}
-              <div className="swap-container">
+                {/* Submit Button */}
                 <button
-                  type="button"
-                  className="swap-btn"
-                  onClick={swapTokens}
+                  type="submit"
+                  className="exchange-btn"
+                  disabled={!isValid || isSubmitting || !values.fromAmount}
                 >
-                  <i>⇅</i>
+                  {isSubmitting ? 'Swapping...' : 'Swap Now'}
                 </button>
-              </div>
-
-              {/* To Token */}
-              <div className="input-section">
-                <label>You Receive</label>
-                <div className="currency-input">
-                  <Field
-                    name="toAmount"
-                    type="number"
-                    placeholder="0.00"
-                    readOnly
-                  />
-                  <TokenSelector
-                    token={selectedToToken}
-                    onClick={() => setShowToModal(true)}
-                  />
-                </div>
-                {values.toAmount && (
-                  <div className="fiat-value">
-                    ≈ ${getUSDValue(values.toAmount, selectedToToken.symbol)} USD
-                  </div>
-                )}
-                <ErrorMessage name="toAmount" component="div" className="error-message" />
-              </div>
-
-              {/* Exchange Rate */}
-              {exchangeRate > 0 && (
-                <div className="exchange-rate">
-                  <span>1 {selectedFromToken.symbol} = {exchangeRate.toFixed(6)} {selectedToToken.symbol}</span>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                className="exchange-btn"
-                disabled={!isValid || isSubmitting || !values.fromAmount}
-              >
-                {isSubmitting ? 'Swapping...' : 'Swap Now'}
-              </button>
-            </Form>
-          )
-        }}
-      </Formik>
-
-      {/* Token Selection Modals */}
-      {showFromModal && (
-        <TokenModal
-          tokens={TOKENS}
-          onSelect={(token) => {
-            setSelectedFromToken(token)
-            setShowFromModal(false)
+              </Form>
+            )
           }}
-          onClose={() => setShowFromModal(false)}
-          title="Select Token to Pay"
+        </Formik>
+
+        {/* Token Selection Modals */}
+        {showFromModal && (
+          <TokenModal
+            tokens={TOKENS}
+            onSelect={(token) => {
+              setSelectedFromToken(token)
+              setShowFromModal(false)
+            }}
+            onClose={() => setShowFromModal(false)}
+            title="Select Token to Pay"
+          />
+        )}
+
+        {showToModal && (
+          <TokenModal
+            tokens={TOKENS}
+            onSelect={(token) => {
+              setSelectedToToken(token)
+              setShowToModal(false)
+            }}
+            onClose={() => setShowToModal(false)}
+            title="Select Token to Receive"
+          />
+        )}
+      </div>
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <SuccessToast 
+          message={successMessage} 
+          onClose={() => setShowSuccessToast(false)} 
         />
       )}
-
-      {showToModal && (
-        <TokenModal
-          tokens={TOKENS}
-          onSelect={(token) => {
-            setSelectedToToken(token)
-            setShowToModal(false)
-          }}
-          onClose={() => setShowToModal(false)}
-          title="Select Token to Receive"
-        />
-      )}
-    </div>
+    </>
   )
 }
 
