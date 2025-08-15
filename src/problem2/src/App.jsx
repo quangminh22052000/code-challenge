@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
+import { useQuery } from '@tanstack/react-query'
 import * as Yup from 'yup'
 import './App.css'
 
@@ -27,6 +28,22 @@ const SwapSchema = Yup.object().shape({
     .required('Amount is required')
 })
 
+// API function to fetch prices
+const fetchPrices = async () => {
+  const response = await fetch('https://interview.switcheo.com/prices.json')
+  if (!response.ok) {
+    throw new Error('Failed to fetch prices')
+  }
+  const data = await response.json()
+  
+  // Convert array to object for easier lookup
+  const priceMap = {}
+  data.forEach(item => {
+    priceMap[item.currency] = item.price
+  })
+  return priceMap
+}
+
 function App() {
   return (
     <div className="App">
@@ -36,39 +53,26 @@ function App() {
 }
 
 function CryptoExchange() {
-  const [prices, setPrices] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [showFromModal, setShowFromModal] = useState(false)
   const [showToModal, setShowToModal] = useState(false)
   const [selectedFromToken, setSelectedFromToken] = useState(TOKENS[0])
   const [selectedToToken, setSelectedToToken] = useState(TOKENS[1])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Fetch prices from API
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch('https://interview.switcheo.com/prices.json')
-        const data = await response.json()
-        
-        // Convert array to object for easier lookup
-        const priceMap = {}
-        data.forEach(item => {
-          priceMap[item.currency] = item.price
-        })
-        setPrices(priceMap)
-      } catch (err) {
-        setError('Failed to fetch prices')
-        console.error('Error fetching prices:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchPrices()
-  }, [])
+  // Use useQuery to fetch prices
+  const { 
+    data: prices = {}, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useQuery({
+    queryKey: ['prices'],
+    queryFn: fetchPrices,
+    staleTime: 30000, // Data is fresh for 30 seconds
+    refetchOnWindowFocus: false,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000)
+  })
 
   // Calculate exchange rate
   const getExchangeRate = () => {
@@ -107,7 +111,7 @@ function CryptoExchange() {
     setSelectedToToken(temp)
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="crypto-exchange">
         <div className="loading">
@@ -122,8 +126,8 @@ function CryptoExchange() {
     return (
       <div className="crypto-exchange">
         <div className="error">
-          <p>{error}</p>
-          <button onClick={() => window.location.reload()}>Retry</button>
+          <p>Failed to load prices: {error.message}</p>
+          <button onClick={() => refetch()}>Retry</button>
         </div>
       </div>
     )
